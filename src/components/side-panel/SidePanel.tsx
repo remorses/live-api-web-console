@@ -19,7 +19,7 @@ import cn from "classnames";
 import { useEffect, useRef, useState } from "react";
 import { RiSidebarFoldLine, RiSidebarUnfoldLine } from "react-icons/ri";
 import Select from "react-select";
-import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
+import { useLiveAPIContext, useLiveAPIState } from "../../contexts/LiveAPIContext";
 import Logger, { LoggerFilterType } from "../logger/Logger";
 import "./side-panel.scss";
 
@@ -31,6 +31,7 @@ const filterOptions = [
 
 export default function SidePanel() {
   const client = useLiveAPIContext();
+  const clientState = useLiveAPIState();
   const [open, setOpen] = useState(true);
   const loggerRef = useRef<HTMLDivElement>(null);
   const loggerLastHeightRef = useRef<number>(-1);
@@ -52,7 +53,7 @@ export default function SidePanel() {
         loggerLastHeightRef.current = scrollHeight;
       }
     }
-  }, [client.events]);
+  }, [clientState.events]);
 
   const handleSubmit = () => {
     client.sendText(textInput);
@@ -105,8 +106,8 @@ export default function SidePanel() {
             setSelectedOption(e);
           }}
         />
-        <div className={cn("streaming-indicator", { connected: client.connected })}>
-          {client.connected
+        <div className={cn("streaming-indicator", { connected: clientState.connected })}>
+          {clientState.connected
             ? `🔵${open ? " Streaming" : ""}`
             : `⏸️${open ? " Paused" : ""}`}
         </div>
@@ -114,10 +115,10 @@ export default function SidePanel() {
       <div className="side-panel-container" ref={loggerRef}>
         <Logger
           filter={(selectedOption?.value as LoggerFilterType) || "none"}
-          events={client.events}
+          events={clientState.events}
         />
       </div>
-      <div className={cn("input-container", { disabled: !client.connected })}>
+      <div className={cn("input-container", { disabled: !clientState.connected })}>
         <div className="input-content">
           <textarea
             className="input-area"

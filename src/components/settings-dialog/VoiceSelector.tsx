@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Select from "react-select";
-import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
+import { useLiveAPIContext, useLiveAPIState } from "../../contexts/LiveAPIContext";
 
 const voiceOptions = [
   { value: "Puck", label: "Puck" },
@@ -11,7 +11,8 @@ const voiceOptions = [
 ];
 
 export default function VoiceSelector() {
-  const { config, setConfig } = useLiveAPIContext();
+  const client = useLiveAPIContext();
+  const { config } = useLiveAPIState();
 
   useEffect(() => {
     const voiceName =
@@ -28,7 +29,7 @@ export default function VoiceSelector() {
 
   const updateConfig = useCallback(
     (voiceName: string) => {
-      setConfig({
+      client.setConfig({
         ...config,
         speechConfig: {
           voiceConfig: {
@@ -39,7 +40,7 @@ export default function VoiceSelector() {
         },
       });
     },
-    [config, setConfig]
+    [config, client]
   );
 
   return (

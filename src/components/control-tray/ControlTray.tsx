@@ -17,7 +17,7 @@
 import cn from "classnames";
 
 import { memo, ReactNode, RefObject, useEffect, useRef, useState } from "react";
-import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
+import { useLiveAPIContext, useLiveAPIState } from "../../contexts/LiveAPIContext";
 import { UseMediaStreamResult } from "../../hooks/use-media-stream-mux";
 import { useScreenCapture } from "../../hooks/use-screen-capture";
 import { useWebcam } from "../../hooks/use-webcam";
@@ -72,19 +72,20 @@ function ControlTray({
   const connectButtonRef = useRef<HTMLButtonElement>(null);
 
   const client = useLiveAPIContext();
+  const clientState = useLiveAPIState();
 
   useEffect(() => {
-    if (!client.connected && connectButtonRef.current) {
+    if (!clientState.connected && connectButtonRef.current) {
       connectButtonRef.current.focus();
     }
-  }, [client.connected]);
+  }, [clientState.connected]);
   
   useEffect(() => {
     document.documentElement.style.setProperty(
       "--volume",
-      `${Math.max(5, Math.min(client.inVolume * 200, 8))}px`
+      `${Math.max(5, Math.min(clientState.inVolume * 200, 8))}px`
     );
-  }, [client.inVolume]);
+  }, [clientState.inVolume]);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -110,17 +111,17 @@ function ControlTray({
         const data = base64.slice(base64.indexOf(",") + 1, Infinity);
         client.sendRealtimeInput([{ mimeType: "image/jpeg", data }]);
       }
-      if (client.connected) {
+      if (clientState.connected) {
         timeoutId = window.setTimeout(sendVideoFrame, 1000 / 0.5);
       }
     }
-    if (client.connected && activeVideoStream !== null) {
+    if (clientState.connected && activeVideoStream !== null) {
       requestAnimationFrame(sendVideoFrame);
     }
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [client.connected, activeVideoStream, client, videoRef]);
+  }, [clientState.connected, activeVideoStream, client, videoRef]);
 
   //handler for swapping from one video-stream to the next
   const changeStreams = (next?: UseMediaStreamResult) => async () => {
@@ -139,12 +140,12 @@ function ControlTray({
   return (
     <section className="control-tray">
       <canvas style={{ display: "none" }} ref={renderCanvasRef} />
-      <nav className={cn("actions-nav", { disabled: !client.connected })}>
+      <nav className={cn("actions-nav", { disabled: !clientState.connected })}>
         <button
           className={cn("action-button mic-button")}
-          onClick={() => client.setMuted(!client.muted)}
+          onClick={() => client.setMuted(!clientState.muted)}
         >
-          {!client.muted ? (
+          {!clientState.muted ? (
             <span className="material-symbols-outlined filled">mic</span>
           ) : (
             <span className="material-symbols-outlined filled">mic_off</span>
@@ -152,7 +153,7 @@ function ControlTray({
         </button>
 
         <div className="action-button no-action outlined">
-          <AudioPulse volume={client.outVolume} active={client.connected} hover={false} />
+          <AudioPulse volume={clientState.outVolume} active={clientState.connected} hover={false} />
         </div>
 
         {supportsVideo && (
@@ -176,15 +177,15 @@ function ControlTray({
         {children}
       </nav>
 
-      <div className={cn("connection-container", { connected: client.connected })}>
+      <div className={cn("connection-container", { connected: clientState.connected })}>
         <div className="connection-button-container">
           <button
             ref={connectButtonRef}
-            className={cn("action-button connect-toggle", { connected: client.connected })}
-            onClick={() => client.connected ? client.disconnect() : client.connect()}
+            className={cn("action-button connect-toggle", { connected: clientState.connected })}
+            onClick={() => clientState.connected ? client.disconnect() : client.connect()}
           >
             <span className="material-symbols-outlined filled">
-              {client.connected ? "pause" : "play_arrow"}
+              {clientState.connected ? "pause" : "play_arrow"}
             </span>
           </button>
         </div>

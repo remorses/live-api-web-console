@@ -13,37 +13,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { useEffect, useRef, useState, memo } from "react";
-import vegaEmbed from "vega-embed";
+import { useEffect, useRef, memo, useMemo } from "react";
 import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
-import {
-  FunctionDeclaration,
-  LiveServerToolCall,
-  Modality,
-  Type,
-} from "@google/genai";
-
-const declaration: FunctionDeclaration = {
-  name: "render_altair",
-  description: "Displays an altair graph in json format.",
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      json_graph: {
-        type: Type.STRING,
-        description:
-          "JSON STRING representation of the graph to render. Must be a string, not a json object",
-      },
-    },
-    required: ["json_graph"],
-  },
-};
+import { Modality } from "@google/genai";
+import { AltairTool } from "./altair-tool";
 
 function AltairComponent() {
-  const [jsonString, setJSONString] = useState<string>("");
   const client = useLiveAPIContext();
+  const embedRef = useRef<HTMLDivElement>(null);
+  
+  // Create the Altair tool instance
+  const altairTool = useMemo(() => new AltairTool(), []);
 
   useEffect(() => {
+    // Set the container for the Altair tool when ref is ready
+    if (embedRef.current) {
+      altairTool.setContainer(embedRef.current);
+    }
+  }, [altairTool]);
+
+  useEffect(() => {
+    // Set the tools on the client
+    client.setTools([altairTool]);
+    
+    // Configure the model
     client.setModel("models/gemini-2.0-flash-exp");
     client.setConfig({
       responseModalities: [Modality.AUDIO],
@@ -62,57 +55,10 @@ function AltairComponent() {
       tools: [
         // there is a free-tier quota for search
         { googleSearch: {} },
-        { functionDeclarations: [declaration] },
       ],
     });
-  }, [client]);
+  }, [client, altairTool]);
 
-  useEffect(() => {
-    const handlerId = 'altair-handler';
-    
-    const onToolCall = (toolCall: LiveServerToolCall) => {
-      if (!toolCall.functionCalls) {
-        return;
-      }
-      const fc = toolCall.functionCalls.find(
-        (fc) => fc.name === declaration.name,
-      );
-      if (fc) {
-        const str = (fc.args as any).json_graph;
-        setJSONString(str);
-      }
-      // send data for the response of your tool call
-      // in this case Im just saying it was successful
-      if (toolCall.functionCalls.length) {
-        setTimeout(
-          () =>
-            client.sendToolResponse({
-              functionResponses: toolCall.functionCalls?.map((fc) => ({
-                response: { output: { success: true } },
-                id: fc.id,
-                name: fc.name,
-              })),
-            }),
-          200,
-        );
-      }
-    };
-    
-    client.registerToolHandler(handlerId, onToolCall);
-    
-    return () => {
-      client.unregisterToolHandler(handlerId);
-    };
-  }, [client]);
-
-  const embedRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (embedRef.current && jsonString) {
-      console.log("jsonString", jsonString);
-      vegaEmbed(embedRef.current, JSON.parse(jsonString));
-    }
-  }, [embedRef, jsonString]);
   return <div className="vega-embed" ref={embedRef} />;
 }
 

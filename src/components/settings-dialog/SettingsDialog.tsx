@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 import "./settings-dialog.scss";
-import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
+import { useLiveAPIContext, useLiveAPIState } from "../../contexts/LiveAPIContext";
 import VoiceSelector from "./VoiceSelector";
 import ResponseModalitySelector from "./ResponseModalitySelector";
 import { FunctionDeclaration, LiveConnectConfig, Tool } from "@google/genai";
@@ -17,7 +17,8 @@ type FunctionDeclarationsTool = Tool & {
 
 export default function SettingsDialog() {
   const [open, setOpen] = useState(false);
-  const { config, setConfig, connected } = useLiveAPIContext();
+  const client = useLiveAPIContext();
+  const { config, connected } = useLiveAPIState();
   const functionDeclarations: FunctionDeclaration[] = useMemo(() => {
     if (!Array.isArray(config.tools)) {
       return [];
@@ -61,9 +62,9 @@ export default function SettingsDialog() {
         ...config,
         systemInstruction: event.target.value,
       };
-      setConfig(newConfig);
+      client.setConfig(newConfig);
     },
-    [config, setConfig]
+    [config, client]
   );
 
   const updateFunctionDescription = useCallback(
@@ -86,9 +87,9 @@ export default function SettingsDialog() {
             };
           }) || [],
       };
-      setConfig(newConfig);
+      client.setConfig(newConfig);
     },
-    [config, setConfig]
+    [config, client]
   );
 
   return (

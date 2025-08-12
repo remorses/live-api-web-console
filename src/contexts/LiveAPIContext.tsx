@@ -15,10 +15,11 @@
  */
 
 import { createContext, FC, ReactNode, useContext, useEffect, useMemo, useState } from "react";
-import { LiveAPIClient } from "../lib/live-api-client";
+import { LiveAPIClient, LiveAPIState } from "../lib/live-api-client";
 import { LiveClientOptions } from "../types";
 
 const LiveAPIContext = createContext<LiveAPIClient | undefined>(undefined);
+const LiveAPIStateContext = createContext<LiveAPIState | undefined>(undefined);
 
 export type LiveAPIProviderProps = {
   children: ReactNode;
@@ -29,18 +30,19 @@ export const LiveAPIProvider: FC<LiveAPIProviderProps> = ({
   options,
   children,
 }) => {
-  const [, forceUpdate] = useState({});
-  
+  const [clientState, setClientState] = useState<LiveAPIState | null>(null);
+
   const client = useMemo(() => {
     return new LiveAPIClient({
       ...options,
-      onVolumeChange: () => forceUpdate({}),
-      onEventsChange: () => forceUpdate({}),
-      onConnectionChange: () => forceUpdate({}),
+      onStateChange: (state) => setClientState(state),
     });
   }, [options]);
 
   useEffect(() => {
+    // Initialize state
+    setClientState(client.getState());
+
     return () => {
       client.destroy();
     };
@@ -48,7 +50,9 @@ export const LiveAPIProvider: FC<LiveAPIProviderProps> = ({
 
   return (
     <LiveAPIContext.Provider value={client}>
-      {children}
+      <LiveAPIStateContext.Provider value={clientState || client.getState()}>
+        {children}
+      </LiveAPIStateContext.Provider>
     </LiveAPIContext.Provider>
   );
 };
@@ -57,6 +61,14 @@ export const useLiveAPIContext = () => {
   const context = useContext(LiveAPIContext);
   if (!context) {
     throw new Error("useLiveAPIContext must be used wihin a LiveAPIProvider");
+  }
+  return context;
+};
+
+export const useLiveAPIState = () => {
+  const context = useContext(LiveAPIStateContext);
+  if (!context) {
+    throw new Error("useLiveAPIState must be used within a LiveAPIProvider");
   }
   return context;
 };

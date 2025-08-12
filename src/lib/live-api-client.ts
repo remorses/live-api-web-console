@@ -18,14 +18,14 @@ import {
   Content,
   GoogleGenAI,
   LiveCallbacks,
-  LiveClientToolResponse,
   LiveConnectConfig,
   LiveServerContent,
   LiveServerMessage,
   LiveServerToolCall,
-  LiveServerToolCallCancellation,
   Part,
   Session,
+  CallableTool,
+  FunctionCall,
 } from "@google/genai";
 
 import { difference } from "lodash";
@@ -41,10 +41,19 @@ export interface LiveAPIEvent {
   data?: any;
 }
 
+export interface LiveAPIState {
+  connected: boolean;
+  muted: boolean;
+  inVolume: number;
+  outVolume: number;
+  events: LiveAPIEvent[];
+  model: string;
+  config: LiveConnectConfig;
+}
+
 export interface LiveAPIClientOptions extends LiveClientOptions {
-  onVolumeChange?: (inVolume: number, outVolume: number) => void;
-  onEventsChange?: () => void;
-  onConnectionChange?: (connected: boolean) => void;
+  onStateChange?: (state: LiveAPIState) => void;
+  tools?: CallableTool[];
 }
 
 export class LiveAPIClient {
@@ -52,33 +61,52 @@ export class LiveAPIClient {
   private session: Session | null = null;
   private audioStreamer: AudioStreamer | null = null;
   private audioRecorder: AudioRecorder | null = null;
-  public config: LiveConnectConfig = {};
-  
-  // Public state fields
-  public connected: boolean = false;
-  public muted: boolean = false;
-  public model: string = "models/gemini-2.0-flash-exp";
-  public events: LiveAPIEvent[] = [];
-  public inVolume: number = 0;
-  public outVolume: number = 0;
-  
-  // Callbacks for reactive updates
-  private onVolumeChange?: (inVolume: number, outVolume: number) => void;
-  private onEventsChange?: () => void;
-  private onConnectionChange?: (connected: boolean) => void;
-  
-  // Tool handlers
-  private toolHandlers: Map<string, (toolCall: LiveServerToolCall) => void> = new Map();
+
+  // Internal state object
+  private _state: LiveAPIState = {
+    connected: false,
+    muted: false,
+    inVolume: 0,
+    outVolume: 0,
+    events: [],
+    model: "models/gemini-2.0-flash-exp",
+    config: {}
+  };
+
+  // Public getters for state properties
+  get connected() { return this._state.connected; }
+  get muted() { return this._state.muted; }
+  get inVolume() { return this._state.inVolume; }
+  get outVolume() { return this._state.outVolume; }
+  get events() { return this._state.events; }
+  get model() { return this._state.model; }
+  get config() { return this._state.config; }
+
+  // Callback for state changes
+  private onStateChange?: (state: LiveAPIState) => void;
+
+  // Callable tools
+  private tools: CallableTool[] = [];
 
   constructor(options: LiveAPIClientOptions) {
-    const { onVolumeChange, onEventsChange, onConnectionChange, ...clientOptions } = options;
+    const { onStateChange, tools, ...clientOptions } = options;
     this.client = new GoogleGenAI(clientOptions);
-    this.onVolumeChange = onVolumeChange;
-    this.onEventsChange = onEventsChange;
-    this.onConnectionChange = onConnectionChange;
-    
+    this.onStateChange = onStateChange;
+    this.tools = tools || [];
+
     this.audioRecorder = new AudioRecorder(16000);
     this.setupAudioRecorder();
+  }
+
+  // Method to update state and notify listeners
+  private updateState(updates: Partial<LiveAPIState>) {
+    this._state = { ...this._state, ...updates };
+    this.onStateChange?.(this._state);
+  }
+
+  // Get a copy of the current state
+  public getState(): LiveAPIState {
+    return { ...this._state };
   }
 
   private async initAudioStreamer() {
@@ -86,27 +114,25 @@ export class LiveAPIClient {
       const audioCtx = await audioContext({ id: "audio-out" });
       this.audioStreamer = new AudioStreamer(audioCtx);
       await this.audioStreamer.addWorklet<any>("vumeter-out", VolMeterWorket, (ev: any) => {
-        this.outVolume = ev.data.volume;
-        this.onVolumeChange?.(this.inVolume, this.outVolume);
+        this.updateState({ outVolume: ev.data.volume });
       });
     }
   }
 
   private setupAudioRecorder() {
     if (!this.audioRecorder) return;
-    
+
     this.audioRecorder.on("data", (base64: string) => {
-      if (this.connected && !this.muted) {
+      if (this._state.connected && !this._state.muted) {
         this.sendRealtimeInput([{
           mimeType: "audio/pcm;rate=16000",
           data: base64,
         }]);
       }
     });
-    
+
     this.audioRecorder.on("volume", (volume: number) => {
-      this.inVolume = volume;
-      this.onVolumeChange?.(this.inVolume, this.outVolume);
+      this.updateState({ inVolume: volume });
     });
   }
 
@@ -116,14 +142,14 @@ export class LiveAPIClient {
       timestamp: new Date(),
       data
     };
-    this.events.push(event);
-    
+    const newEvents = [...this._state.events, event];
+
     // Keep events array reasonable size
-    if (this.events.length > 200) {
-      this.events = this.events.slice(-150);
+    if (newEvents.length > 200) {
+      this.updateState({ events: newEvents.slice(-150) });
+    } else {
+      this.updateState({ events: newEvents });
     }
-    
-    this.onEventsChange?.();
   }
 
   async connect(model?: string, config?: LiveConnectConfig): Promise<boolean> {
@@ -133,8 +159,10 @@ export class LiveAPIClient {
 
     await this.initAudioStreamer();
 
-    this.model = model || this.model;
-    this.config = config || this.config;
+    this.updateState({
+      model: model || this._state.model,
+      config: config || this._state.config
+    });
 
     const callbacks: LiveCallbacks = {
       onopen: this.onOpen.bind(this),
@@ -145,8 +173,8 @@ export class LiveAPIClient {
 
     try {
       this.session = await this.client.live.connect({
-        model: this.model,
-        config: this.config,
+        model: this._state.model,
+        config: this._state.config,
         callbacks,
       });
     } catch (e) {
@@ -162,23 +190,22 @@ export class LiveAPIClient {
     if (!this.session) {
       return false;
     }
-    
+
     this.session?.close();
     this.session = null;
     this.setConnected(false);
-    
+
     this.audioRecorder?.stop();
     this.audioStreamer?.stop();
-    
+
     this.addEvent('close', { reason: 'User disconnected' });
     return true;
   }
 
   private setConnected(value: boolean) {
-    this.connected = value;
-    this.onConnectionChange?.(value);
-    
-    if (value && !this.muted) {
+    this.updateState({ connected: value });
+
+    if (value && !this._state.muted) {
       this.audioRecorder?.start();
     } else {
       this.audioRecorder?.stop();
@@ -204,17 +231,17 @@ export class LiveAPIClient {
       this.addEvent('setupcomplete');
       return;
     }
-    
+
     if (message.toolCall) {
       this.addEvent('toolcall', message.toolCall);
-      
-      // Call registered tool handlers
-      for (const [, handler] of this.toolHandlers) {
-        handler(message.toolCall);
+
+      // Automatically handle tool calls with callable tools
+      if (message.toolCall.functionCalls && this.tools.length > 0) {
+        this.handleToolCalls(message.toolCall.functionCalls);
       }
       return;
     }
-    
+
     if (message.toolCallCancellation) {
       this.addEvent('toolcallcancellation', message.toolCallCancellation);
       return;
@@ -222,15 +249,17 @@ export class LiveAPIClient {
 
     if (message.serverContent) {
       const { serverContent } = message;
-      
+
       if ("interrupted" in serverContent) {
         this.addEvent('interrupted');
         this.audioStreamer?.stop();
         return;
       }
-      
+
       if ("turnComplete" in serverContent) {
         this.addEvent('turncomplete');
+        // Signal to audio streamer that the turn is complete so it can flush remaining audio
+        // this.audioStreamer?.complete();
       }
 
       if ("modelTurn" in serverContent) {
@@ -264,8 +293,8 @@ export class LiveAPIClient {
 
   // Public methods for interaction
   setMuted(muted: boolean) {
-    this.muted = muted;
-    if (this.connected) {
+    this.updateState({ muted });
+    if (this._state.connected) {
       if (muted) {
         this.audioRecorder?.stop();
       } else {
@@ -276,7 +305,7 @@ export class LiveAPIClient {
 
   sendText(text: string, turnComplete: boolean = true) {
     if (!this.session) return;
-    
+
     const parts: Part[] = [{ text }];
     this.session.sendClientContent({ turns: parts, turnComplete });
     this.addEvent('client-send', { turns: parts, turnComplete });
@@ -284,10 +313,10 @@ export class LiveAPIClient {
 
   sendRealtimeInput(chunks: Array<{ mimeType: string; data: string }>) {
     if (!this.session) return;
-    
+
     let hasAudio = false;
     let hasVideo = false;
-    
+
     for (const ch of chunks) {
       this.session.sendRealtimeInput({ media: ch });
       if (ch.mimeType.includes("audio")) {
@@ -297,42 +326,71 @@ export class LiveAPIClient {
         hasVideo = true;
       }
     }
-    
+
     const mediaType = hasAudio && hasVideo ? "audio+video" : hasAudio ? "audio" : hasVideo ? "video" : "unknown";
     this.addEvent('client-realtimeInput', { mediaType });
   }
 
-  sendToolResponse(toolResponse: LiveClientToolResponse) {
-    if (!this.session) return;
-    
-    if (toolResponse.functionResponses && toolResponse.functionResponses.length) {
-      this.session.sendToolResponse({
-        functionResponses: toolResponse.functionResponses,
-      });
-      this.addEvent('client-toolResponse', toolResponse);
+  // Handle tool calls automatically
+  private async handleToolCalls(functionCalls: FunctionCall[]) {
+    if (!this.session || !this.tools.length) return;
+
+    try {
+      // Execute all callable tools and collect responses
+      const responseParts: Part[] = [];
+
+      for (const tool of this.tools) {
+        const parts = await tool.callTool(functionCalls);
+        responseParts.push(...parts);
+      }
+
+      // Convert Parts to function responses
+      if (responseParts.length > 0) {
+        const functionResponses = responseParts
+          .filter(part => part.functionResponse)
+          .map(part => ({
+            response: part.functionResponse!.response as Record<string, unknown>,
+            id: part.functionResponse!.id,
+            name: part.functionResponse!.name,
+          }));
+
+        if (functionResponses.length > 0) {
+          this.session.sendToolResponse({ functionResponses });
+          this.addEvent('client-toolResponse', { functionResponses });
+        }
+      }
+    } catch (error) {
+      console.error('Error handling tool calls:', error);
+      this.addEvent('error', { message: 'Tool call failed', error });
     }
   }
 
-  // Register a tool handler
-  registerToolHandler(id: string, handler: (toolCall: LiveServerToolCall) => void) {
-    this.toolHandlers.set(id, handler);
-  }
-
-  unregisterToolHandler(id: string) {
-    this.toolHandlers.delete(id);
+  // Add or update tools
+  setTools(tools: CallableTool[]) {
+    this.tools = tools;
   }
 
   // Update configuration
-  setConfig(config: LiveConnectConfig) {
-    this.config = config;
+  async setConfig(config: LiveConnectConfig) {
+    // If tools are provided, convert them to tool declarations
+    if (this.tools.length > 0) {
+      const toolDeclarations = await Promise.all(
+        this.tools.map(tool => tool.tool())
+      );
+      config = {
+        ...config,
+        tools: [...(config.tools || []), ...toolDeclarations]
+      };
+    }
+    this.updateState({ config });
   }
 
   setModel(model: string) {
-    this.model = model;
+    this.updateState({ model });
   }
 
   getConfig() {
-    return { ...this.config };
+    return { ...this._state.config };
   }
 
   // Clean up
@@ -340,6 +398,6 @@ export class LiveAPIClient {
     this.disconnect();
     this.audioRecorder?.stop();
     this.audioStreamer?.stop();
-    this.toolHandlers.clear();
+    this.tools = [];
   }
 }
