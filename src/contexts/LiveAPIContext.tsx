@@ -17,6 +17,7 @@
 import { createContext, FC, ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import { LiveAPIClient, LiveAPIState } from "../lib/live-api-client";
 import { LiveClientOptions } from "../types";
+import { WeatherTool } from "../lib/weather-tool";
 
 const LiveAPIContext = createContext<LiveAPIClient | undefined>(undefined);
 const LiveAPIStateContext = createContext<LiveAPIState | undefined>(undefined);
@@ -32,12 +33,15 @@ export const LiveAPIProvider: FC<LiveAPIProviderProps> = ({
 }) => {
   const [clientState, setClientState] = useState<LiveAPIState | null>(null);
 
+  const weatherTool = useMemo(() => new WeatherTool(), []);
+  
   const client = useMemo(() => {
     return new LiveAPIClient({
       ...options,
+      tools: [weatherTool],
       onStateChange: (state) => setClientState(state),
     });
-  }, [options]);
+  }, [options, weatherTool]);
 
   useEffect(() => {
     // Initialize state

@@ -274,8 +274,8 @@ export class LiveAPIClient {
 
     if (message.toolCall) {
       this.addEvent("toolcall", message.toolCall);
-
-      // Automatically handle tool calls with callable tools
+      
+      // Manually handle tool calls
       if (message.toolCall.functionCalls && this.tools.length > 0) {
         this.handleToolCalls(message.toolCall.functionCalls);
       }
@@ -378,32 +378,25 @@ export class LiveAPIClient {
     this.addEvent("client-realtimeInput", { mediaType });
   }
 
-  // Handle tool calls automatically
+
+  // Handle tool calls manually
   private async handleToolCalls(functionCalls: FunctionCall[]) {
     if (!this.session || !this.tools.length) return;
-
+    
     try {
       // Execute all callable tools and collect responses
-      const responseParts: Part[] = [];
-
       for (const tool of this.tools) {
         const parts = await tool.callTool(functionCalls);
-        responseParts.push(...parts);
-      }
-
-      // Convert Parts to function responses
-      if (responseParts.length > 0) {
-        const functionResponses = responseParts
-          .filter((part) => part.functionResponse)
-          .map((part) => ({
-            response: part.functionResponse!.response as Record<
-              string,
-              unknown
-            >,
+        
+        // Convert Parts to function responses and send back
+        const functionResponses = parts
+          .filter(part => part.functionResponse)
+          .map(part => ({
+            response: part.functionResponse!.response as Record<string, unknown>,
             id: part.functionResponse!.id,
             name: part.functionResponse!.name,
           }));
-
+        
         if (functionResponses.length > 0) {
           this.session.sendToolResponse({ functionResponses });
           this.addEvent("client-toolResponse", { functionResponses });
@@ -419,10 +412,8 @@ export class LiveAPIClient {
   setConfig(config: LiveConnectConfig) {
     // Extract CallableTools from the config if provided
     if (config.tools) {
-      this.tools = config.tools.filter(
-        (tool): tool is CallableTool => 
-          'callTool' in tool && typeof (tool as any).callTool === 'function'
-      );
+      // Only keep CallableTools - we don't support other tool types
+      this.tools = config.tools as CallableTool[];
     }
     this.updateState({ config });
   }

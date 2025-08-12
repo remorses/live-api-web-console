@@ -17,6 +17,7 @@ import { useEffect, useRef, memo, useMemo } from "react";
 import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
 import { Modality, MediaResolution } from "@google/genai";
 import { AltairTool } from "./altair-tool";
+import { WeatherTool } from "../../lib/weather-tool";
 
 function AltairComponent() {
   const client = useLiveAPIContext();
@@ -57,8 +58,7 @@ function AltairComponent() {
         ],
       },
       tools: [
-        // there is a free-tier quota for search
-        { googleSearch: {} },
+        new WeatherTool(),
         altairTool,
       ],
     });
