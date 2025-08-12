@@ -41,12 +41,14 @@ const declaration: FunctionDeclaration = {
 
 function AltairComponent() {
   const [jsonString, setJSONString] = useState<string>("");
-  const { client, setConfig, setModel } = useLiveAPIContext();
+  const client = useLiveAPIContext();
 
   useEffect(() => {
-    setModel("models/gemini-2.0-flash-exp");
-    setConfig({
+    client.setModel("models/gemini-2.0-flash-exp");
+    client.setConfig({
       responseModalities: [Modality.AUDIO],
+      inputAudioTranscription: {}, // transcribes your input speech
+      outputAudioTranscription: {}, // transcribes the model's spoken audio
       speechConfig: {
         voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
       },
@@ -63,15 +65,17 @@ function AltairComponent() {
         { functionDeclarations: [declaration] },
       ],
     });
-  }, [setConfig, setModel]);
+  }, [client]);
 
   useEffect(() => {
+    const handlerId = 'altair-handler';
+    
     const onToolCall = (toolCall: LiveServerToolCall) => {
       if (!toolCall.functionCalls) {
         return;
       }
       const fc = toolCall.functionCalls.find(
-        (fc) => fc.name === declaration.name
+        (fc) => fc.name === declaration.name,
       );
       if (fc) {
         const str = (fc.args as any).json_graph;
@@ -89,13 +93,15 @@ function AltairComponent() {
                 name: fc.name,
               })),
             }),
-          200
+          200,
         );
       }
     };
-    client.on("toolcall", onToolCall);
+    
+    client.registerToolHandler(handlerId, onToolCall);
+    
     return () => {
-      client.off("toolcall", onToolCall);
+      client.unregisterToolHandler(handlerId);
     };
   }, [client]);
 

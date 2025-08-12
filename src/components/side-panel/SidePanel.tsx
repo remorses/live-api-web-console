@@ -20,7 +20,6 @@ import { useEffect, useRef, useState } from "react";
 import { RiSidebarFoldLine, RiSidebarUnfoldLine } from "react-icons/ri";
 import Select from "react-select";
 import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
-import { useLoggerStore } from "../../lib/store-logger";
 import Logger, { LoggerFilterType } from "../logger/Logger";
 import "./side-panel.scss";
 
@@ -31,11 +30,10 @@ const filterOptions = [
 ];
 
 export default function SidePanel() {
-  const { connected, client } = useLiveAPIContext();
+  const client = useLiveAPIContext();
   const [open, setOpen] = useState(true);
   const loggerRef = useRef<HTMLDivElement>(null);
   const loggerLastHeightRef = useRef<number>(-1);
-  const { log, logs } = useLoggerStore();
 
   const [textInput, setTextInput] = useState("");
   const [selectedOption, setSelectedOption] = useState<{
@@ -44,7 +42,7 @@ export default function SidePanel() {
   } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  //scroll the log to the bottom when new logs come in
+  //scroll the log to the bottom when new events come in
   useEffect(() => {
     if (loggerRef.current) {
       const el = loggerRef.current;
@@ -54,18 +52,10 @@ export default function SidePanel() {
         loggerLastHeightRef.current = scrollHeight;
       }
     }
-  }, [logs]);
-
-  // listen for log events and store them
-  useEffect(() => {
-    client.on("log", log);
-    return () => {
-      client.off("log", log);
-    };
-  }, [client, log]);
+  }, [client.events]);
 
   const handleSubmit = () => {
-    client.send([{ text: textInput }]);
+    client.sendText(textInput);
 
     setTextInput("");
     if (inputRef.current) {
@@ -115,8 +105,8 @@ export default function SidePanel() {
             setSelectedOption(e);
           }}
         />
-        <div className={cn("streaming-indicator", { connected })}>
-          {connected
+        <div className={cn("streaming-indicator", { connected: client.connected })}>
+          {client.connected
             ? `🔵${open ? " Streaming" : ""}`
             : `⏸️${open ? " Paused" : ""}`}
         </div>
@@ -124,9 +114,10 @@ export default function SidePanel() {
       <div className="side-panel-container" ref={loggerRef}>
         <Logger
           filter={(selectedOption?.value as LoggerFilterType) || "none"}
+          events={client.events}
         />
       </div>
-      <div className={cn("input-container", { disabled: !connected })}>
+      <div className={cn("input-container", { disabled: !client.connected })}>
         <div className="input-content">
           <textarea
             className="input-area"

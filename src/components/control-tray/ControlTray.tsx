@@ -21,7 +21,6 @@ import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
 import { UseMediaStreamResult } from "../../hooks/use-media-stream-mux";
 import { useScreenCapture } from "../../hooks/use-screen-capture";
 import { useWebcam } from "../../hooks/use-webcam";
-import { AudioRecorder } from "../../lib/audio-recorder";
 import AudioPulse from "../audio-pulse/AudioPulse";
 import "./control-tray.scss";
 import SettingsDialog from "../settings-dialog/SettingsDialog";
@@ -69,45 +68,23 @@ function ControlTray({
   const [activeVideoStream, setActiveVideoStream] =
     useState<MediaStream | null>(null);
   const [webcam, screenCapture] = videoStreams;
-  const [inVolume, setInVolume] = useState(0);
-  const [audioRecorder] = useState(() => new AudioRecorder());
-  const [muted, setMuted] = useState(false);
   const renderCanvasRef = useRef<HTMLCanvasElement>(null);
   const connectButtonRef = useRef<HTMLButtonElement>(null);
 
-  const { client, connected, connect, disconnect, volume } =
-    useLiveAPIContext();
+  const client = useLiveAPIContext();
 
   useEffect(() => {
-    if (!connected && connectButtonRef.current) {
+    if (!client.connected && connectButtonRef.current) {
       connectButtonRef.current.focus();
     }
-  }, [connected]);
+  }, [client.connected]);
+  
   useEffect(() => {
     document.documentElement.style.setProperty(
       "--volume",
-      `${Math.max(5, Math.min(inVolume * 200, 8))}px`
+      `${Math.max(5, Math.min(client.inVolume * 200, 8))}px`
     );
-  }, [inVolume]);
-
-  useEffect(() => {
-    const onData = (base64: string) => {
-      client.sendRealtimeInput([
-        {
-          mimeType: "audio/pcm;rate=16000",
-          data: base64,
-        },
-      ]);
-    };
-    if (connected && !muted && audioRecorder) {
-      audioRecorder.on("data", onData).on("volume", setInVolume).start();
-    } else {
-      audioRecorder.stop();
-    }
-    return () => {
-      audioRecorder.off("data", onData).off("volume", setInVolume);
-    };
-  }, [connected, client, muted, audioRecorder]);
+  }, [client.inVolume]);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -133,17 +110,17 @@ function ControlTray({
         const data = base64.slice(base64.indexOf(",") + 1, Infinity);
         client.sendRealtimeInput([{ mimeType: "image/jpeg", data }]);
       }
-      if (connected) {
+      if (client.connected) {
         timeoutId = window.setTimeout(sendVideoFrame, 1000 / 0.5);
       }
     }
-    if (connected && activeVideoStream !== null) {
+    if (client.connected && activeVideoStream !== null) {
       requestAnimationFrame(sendVideoFrame);
     }
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [connected, activeVideoStream, client, videoRef]);
+  }, [client.connected, activeVideoStream, client, videoRef]);
 
   //handler for swapping from one video-stream to the next
   const changeStreams = (next?: UseMediaStreamResult) => async () => {
@@ -162,12 +139,12 @@ function ControlTray({
   return (
     <section className="control-tray">
       <canvas style={{ display: "none" }} ref={renderCanvasRef} />
-      <nav className={cn("actions-nav", { disabled: !connected })}>
+      <nav className={cn("actions-nav", { disabled: !client.connected })}>
         <button
           className={cn("action-button mic-button")}
-          onClick={() => setMuted(!muted)}
+          onClick={() => client.setMuted(!client.muted)}
         >
-          {!muted ? (
+          {!client.muted ? (
             <span className="material-symbols-outlined filled">mic</span>
           ) : (
             <span className="material-symbols-outlined filled">mic_off</span>
@@ -175,7 +152,7 @@ function ControlTray({
         </button>
 
         <div className="action-button no-action outlined">
-          <AudioPulse volume={volume} active={connected} hover={false} />
+          <AudioPulse volume={client.outVolume} active={client.connected} hover={false} />
         </div>
 
         {supportsVideo && (
@@ -199,15 +176,15 @@ function ControlTray({
         {children}
       </nav>
 
-      <div className={cn("connection-container", { connected })}>
+      <div className={cn("connection-container", { connected: client.connected })}>
         <div className="connection-button-container">
           <button
             ref={connectButtonRef}
-            className={cn("action-button connect-toggle", { connected })}
-            onClick={connected ? disconnect : connect}
+            className={cn("action-button connect-toggle", { connected: client.connected })}
+            onClick={() => client.connected ? client.disconnect() : client.connect()}
           >
             <span className="material-symbols-outlined filled">
-              {connected ? "pause" : "play_arrow"}
+              {client.connected ? "pause" : "play_arrow"}
             </span>
           </button>
         </div>

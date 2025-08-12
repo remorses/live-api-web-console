@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { createContext, FC, ReactNode, useContext } from "react";
-import { useLiveAPI, UseLiveAPIResults } from "../hooks/use-live-api";
+import { createContext, FC, ReactNode, useContext, useEffect, useMemo, useState } from "react";
+import { LiveAPIClient } from "../lib/live-api-client";
 import { LiveClientOptions } from "../types";
 
-const LiveAPIContext = createContext<UseLiveAPIResults | undefined>(undefined);
+const LiveAPIContext = createContext<LiveAPIClient | undefined>(undefined);
 
 export type LiveAPIProviderProps = {
   children: ReactNode;
@@ -29,10 +29,25 @@ export const LiveAPIProvider: FC<LiveAPIProviderProps> = ({
   options,
   children,
 }) => {
-  const liveAPI = useLiveAPI(options);
+  const [, forceUpdate] = useState({});
+  
+  const client = useMemo(() => {
+    return new LiveAPIClient({
+      ...options,
+      onVolumeChange: () => forceUpdate({}),
+      onEventsChange: () => forceUpdate({}),
+      onConnectionChange: () => forceUpdate({}),
+    });
+  }, [options]);
+
+  useEffect(() => {
+    return () => {
+      client.destroy();
+    };
+  }, [client]);
 
   return (
-    <LiveAPIContext.Provider value={liveAPI}>
+    <LiveAPIContext.Provider value={client}>
       {children}
     </LiveAPIContext.Provider>
   );
