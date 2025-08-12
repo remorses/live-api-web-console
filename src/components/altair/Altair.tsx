@@ -15,7 +15,7 @@
  */
 import { useEffect, useRef, memo, useMemo } from "react";
 import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
-import { Modality } from "@google/genai";
+import { Modality, MediaResolution } from "@google/genai";
 import { AltairTool } from "./altair-tool";
 
 function AltairComponent() {
@@ -33,17 +33,21 @@ function AltairComponent() {
   }, [altairTool]);
 
   useEffect(() => {
-    // Set the tools on the client
-    client.setTools([altairTool]);
+    // Configure the model - using Google's recommended settings
+    client.setModel("models/gemini-2.5-flash-preview-native-audio-dialog");
     
-    // Configure the model
-    client.setModel("models/gemini-2.0-flash-exp");
+    // Set tools along with other config
     client.setConfig({
       responseModalities: [Modality.AUDIO],
       inputAudioTranscription: {}, // transcribes your input speech
       outputAudioTranscription: {}, // transcribes the model's spoken audio
+      mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM,
       speechConfig: {
-        voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
+        voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
+      },
+      contextWindowCompression: {
+        triggerTokens: "25600",
+        slidingWindow: { targetTokens: "12800" },
       },
       systemInstruction: {
         parts: [
@@ -55,6 +59,7 @@ function AltairComponent() {
       tools: [
         // there is a free-tier quota for search
         { googleSearch: {} },
+        altairTool,
       ],
     });
   }, [client, altairTool]);

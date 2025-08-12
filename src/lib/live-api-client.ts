@@ -26,6 +26,7 @@ import {
   Session,
   CallableTool,
   FunctionCall,
+  MediaResolution,
 } from "@google/genai";
 
 import { difference } from "lodash";
@@ -36,7 +37,20 @@ import { audioContext, base64ToArrayBuffer } from "./utils";
 import VolMeterWorket from "./worklets/vol-meter";
 
 export interface LiveAPIEvent {
-  type: 'open' | 'close' | 'error' | 'content' | 'audio' | 'toolcall' | 'toolcallcancellation' | 'interrupted' | 'turncomplete' | 'setupcomplete' | 'client-send' | 'client-realtimeInput' | 'client-toolResponse';
+  type:
+    | "open"
+    | "close"
+    | "error"
+    | "content"
+    | "audio"
+    | "toolcall"
+    | "toolcallcancellation"
+    | "interrupted"
+    | "turncomplete"
+    | "setupcomplete"
+    | "client-send"
+    | "client-realtimeInput"
+    | "client-toolResponse";
   timestamp: Date;
   data?: any;
 }
@@ -69,18 +83,38 @@ export class LiveAPIClient {
     inVolume: 0,
     outVolume: 0,
     events: [],
-    model: "models/gemini-2.0-flash-exp",
-    config: {}
+    model: "models/gemini-2.5-flash-preview-native-audio-dialog",
+    config: {
+      mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM,
+      contextWindowCompression: {
+        triggerTokens: "25600",
+        slidingWindow: { targetTokens: "12800" },
+      },
+    },
   };
 
   // Public getters for state properties
-  get connected() { return this._state.connected; }
-  get muted() { return this._state.muted; }
-  get inVolume() { return this._state.inVolume; }
-  get outVolume() { return this._state.outVolume; }
-  get events() { return this._state.events; }
-  get model() { return this._state.model; }
-  get config() { return this._state.config; }
+  get connected() {
+    return this._state.connected;
+  }
+  get muted() {
+    return this._state.muted;
+  }
+  get inVolume() {
+    return this._state.inVolume;
+  }
+  get outVolume() {
+    return this._state.outVolume;
+  }
+  get events() {
+    return this._state.events;
+  }
+  get model() {
+    return this._state.model;
+  }
+  get config() {
+    return this._state.config;
+  }
 
   // Callback for state changes
   private onStateChange?: (state: LiveAPIState) => void;
@@ -113,9 +147,13 @@ export class LiveAPIClient {
     if (!this.audioStreamer) {
       const audioCtx = await audioContext({ id: "audio-out" });
       this.audioStreamer = new AudioStreamer(audioCtx);
-      await this.audioStreamer.addWorklet<any>("vumeter-out", VolMeterWorket, (ev: any) => {
-        this.updateState({ outVolume: ev.data.volume });
-      });
+      await this.audioStreamer.addWorklet<any>(
+        "vumeter-out",
+        VolMeterWorket,
+        (ev: any) => {
+          this.updateState({ outVolume: ev.data.volume });
+        },
+      );
     }
   }
 
@@ -124,10 +162,12 @@ export class LiveAPIClient {
 
     this.audioRecorder.on("data", (base64: string) => {
       if (this._state.connected && !this._state.muted) {
-        this.sendRealtimeInput([{
-          mimeType: "audio/pcm;rate=16000",
-          data: base64,
-        }]);
+        this.sendRealtimeInput([
+          {
+            mimeType: "audio/pcm;rate=16000",
+            data: base64,
+          },
+        ]);
       }
     });
 
@@ -136,11 +176,11 @@ export class LiveAPIClient {
     });
   }
 
-  private addEvent(type: LiveAPIEvent['type'], data?: any) {
+  private addEvent(type: LiveAPIEvent["type"], data?: any) {
     const event: LiveAPIEvent = {
       type,
       timestamp: new Date(),
-      data
+      data,
     };
     const newEvents = [...this._state.events, event];
 
@@ -161,7 +201,7 @@ export class LiveAPIClient {
 
     this.updateState({
       model: model || this._state.model,
-      config: config || this._state.config
+      config: config || this._state.config,
     });
 
     const callbacks: LiveCallbacks = {
@@ -179,7 +219,7 @@ export class LiveAPIClient {
       });
     } catch (e) {
       console.error("Error connecting to GenAI Live:", e);
-      this.addEvent('error', { message: 'Failed to connect', error: e });
+      this.addEvent("error", { message: "Failed to connect", error: e });
       return false;
     }
 
@@ -198,7 +238,7 @@ export class LiveAPIClient {
     this.audioRecorder?.stop();
     this.audioStreamer?.stop();
 
-    this.addEvent('close', { reason: 'User disconnected' });
+    this.addEvent("close", { reason: "User disconnected" });
     return true;
   }
 
@@ -214,26 +254,26 @@ export class LiveAPIClient {
 
   private onOpen() {
     this.setConnected(true);
-    this.addEvent('open');
+    this.addEvent("open");
   }
 
   private onError(e: ErrorEvent) {
-    this.addEvent('error', { message: e.message, error: e });
+    this.addEvent("error", { message: e.message, error: e });
   }
 
   private onClose(e: CloseEvent) {
     this.setConnected(false);
-    this.addEvent('close', { reason: e.reason, code: e.code });
+    this.addEvent("close", { reason: e.reason, code: e.code });
   }
 
   private async onMessage(message: LiveServerMessage) {
     if (message.setupComplete) {
-      this.addEvent('setupcomplete');
+      this.addEvent("setupcomplete");
       return;
     }
 
     if (message.toolCall) {
-      this.addEvent('toolcall', message.toolCall);
+      this.addEvent("toolcall", message.toolCall);
 
       // Automatically handle tool calls with callable tools
       if (message.toolCall.functionCalls && this.tools.length > 0) {
@@ -243,7 +283,7 @@ export class LiveAPIClient {
     }
 
     if (message.toolCallCancellation) {
-      this.addEvent('toolcallcancellation', message.toolCallCancellation);
+      this.addEvent("toolcallcancellation", message.toolCallCancellation);
       return;
     }
 
@@ -251,13 +291,13 @@ export class LiveAPIClient {
       const { serverContent } = message;
 
       if ("interrupted" in serverContent) {
-        this.addEvent('interrupted');
+        this.addEvent("interrupted");
         this.audioStreamer?.stop();
         return;
       }
 
       if ("turnComplete" in serverContent) {
-        this.addEvent('turncomplete');
+        this.addEvent("turncomplete");
         // Signal to audio streamer that the turn is complete so it can flush remaining audio
         // this.audioStreamer?.complete();
       }
@@ -267,7 +307,7 @@ export class LiveAPIClient {
 
         // Handle audio parts
         const audioParts = parts.filter(
-          (p) => p.inlineData && p.inlineData.mimeType?.startsWith("audio/pcm")
+          (p) => p.inlineData && p.inlineData.mimeType?.startsWith("audio/pcm"),
         );
         const base64s = audioParts.map((p) => p.inlineData?.data);
 
@@ -279,13 +319,13 @@ export class LiveAPIClient {
           if (b64) {
             const data = base64ToArrayBuffer(b64);
             this.audioStreamer?.addPCM16(new Uint8Array(data));
-            this.addEvent('audio', { byteLength: data.byteLength });
+            this.addEvent("audio", { byteLength: data.byteLength });
           }
         });
 
         // Add content event if there are non-audio parts
         if (otherParts.length) {
-          this.addEvent('content', { modelTurn: { parts: otherParts } });
+          this.addEvent("content", { modelTurn: { parts: otherParts } });
         }
       }
     }
@@ -308,7 +348,7 @@ export class LiveAPIClient {
 
     const parts: Part[] = [{ text }];
     this.session.sendClientContent({ turns: parts, turnComplete });
-    this.addEvent('client-send', { turns: parts, turnComplete });
+    this.addEvent("client-send", { turns: parts, turnComplete });
   }
 
   sendRealtimeInput(chunks: Array<{ mimeType: string; data: string }>) {
@@ -327,8 +367,15 @@ export class LiveAPIClient {
       }
     }
 
-    const mediaType = hasAudio && hasVideo ? "audio+video" : hasAudio ? "audio" : hasVideo ? "video" : "unknown";
-    this.addEvent('client-realtimeInput', { mediaType });
+    const mediaType =
+      hasAudio && hasVideo
+        ? "audio+video"
+        : hasAudio
+          ? "audio"
+          : hasVideo
+            ? "video"
+            : "unknown";
+    this.addEvent("client-realtimeInput", { mediaType });
   }
 
   // Handle tool calls automatically
@@ -347,40 +394,35 @@ export class LiveAPIClient {
       // Convert Parts to function responses
       if (responseParts.length > 0) {
         const functionResponses = responseParts
-          .filter(part => part.functionResponse)
-          .map(part => ({
-            response: part.functionResponse!.response as Record<string, unknown>,
+          .filter((part) => part.functionResponse)
+          .map((part) => ({
+            response: part.functionResponse!.response as Record<
+              string,
+              unknown
+            >,
             id: part.functionResponse!.id,
             name: part.functionResponse!.name,
           }));
 
         if (functionResponses.length > 0) {
           this.session.sendToolResponse({ functionResponses });
-          this.addEvent('client-toolResponse', { functionResponses });
+          this.addEvent("client-toolResponse", { functionResponses });
         }
       }
     } catch (error) {
-      console.error('Error handling tool calls:', error);
-      this.addEvent('error', { message: 'Tool call failed', error });
+      console.error("Error handling tool calls:", error);
+      this.addEvent("error", { message: "Tool call failed", error });
     }
   }
 
-  // Add or update tools
-  setTools(tools: CallableTool[]) {
-    this.tools = tools;
-  }
-
   // Update configuration
-  async setConfig(config: LiveConnectConfig) {
-    // If tools are provided, convert them to tool declarations
-    if (this.tools.length > 0) {
-      const toolDeclarations = await Promise.all(
-        this.tools.map(tool => tool.tool())
+  setConfig(config: LiveConnectConfig) {
+    // Extract CallableTools from the config if provided
+    if (config.tools) {
+      this.tools = config.tools.filter(
+        (tool): tool is CallableTool => 
+          'callTool' in tool && typeof (tool as any).callTool === 'function'
       );
-      config = {
-        ...config,
-        tools: [...(config.tools || []), ...toolDeclarations]
-      };
     }
     this.updateState({ config });
   }
