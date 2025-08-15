@@ -240,10 +240,10 @@ const component = (event: LiveAPIEvent) => {
       return PlainTextMessage;
     case "setupcomplete":
       return CustomPlainTextLog("Setup Complete");
-    case "audio":
-      return CustomPlainTextLog(`Audio buffer (${event.data?.byteLength || 0} bytes)`);
-    case "client-realtimeInput":
-      return CustomPlainTextLog(`Sending ${event.data?.mediaType || "unknown"}`);
+    // case "audio":
+    //   return CustomPlainTextLog(`Audio buffer (${event.data?.byteLength || 0} bytes)`);
+    // case "client-realtimeInput":
+    //   return CustomPlainTextLog(`Sending ${event.data?.mediaType || "unknown"}`);
     default:
       return AnyMessage;
   }

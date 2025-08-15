@@ -53,7 +53,7 @@ export default function SidePanel() {
         loggerLastHeightRef.current = scrollHeight;
       }
     }
-  }, [clientState.events]);
+  }, [clientState.logs]);
 
   const handleSubmit = () => {
     client.sendText(textInput);
@@ -115,7 +115,7 @@ export default function SidePanel() {
       <div className="side-panel-container" ref={loggerRef}>
         <Logger
           filter={(selectedOption?.value as LoggerFilterType) || "none"}
-          events={clientState.events}
+          events={clientState.logs}
         />
       </div>
       <div className={cn("input-container", { disabled: !clientState.connected })}>

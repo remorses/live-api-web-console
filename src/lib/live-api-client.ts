@@ -36,31 +36,13 @@ import { AudioRecorder } from "./audio-recorder";
 import { audioContext, base64ToArrayBuffer } from "./utils";
 import VolMeterWorket from "./worklets/vol-meter";
 
-export interface LiveAPIEvent {
-  type:
-    | "open"
-    | "close"
-    | "error"
-    | "content"
-    | "audio"
-    | "toolcall"
-    | "toolcallcancellation"
-    | "interrupted"
-    | "turncomplete"
-    | "setupcomplete"
-    | "client-send"
-    | "client-realtimeInput"
-    | "client-toolResponse";
-  timestamp: Date;
-  data?: any;
-}
 
 export interface LiveAPIState {
   connected: boolean;
   muted: boolean;
   inVolume: number;
   outVolume: number;
-  events: LiveAPIEvent[];
+  logs: string[];
   model: string;
   config: LiveConnectConfig;
 }
@@ -81,7 +63,7 @@ export class LiveAPIClient {
     muted: false,
     inVolume: 0,
     outVolume: 0,
-    events: [],
+    logs: [],
     model: "models/gemini-2.5-flash-preview-native-audio-dialog",
     config: {
       mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM,
@@ -150,19 +132,15 @@ export class LiveAPIClient {
     });
   }
 
-  private addEvent(type: LiveAPIEvent["type"], data?: any) {
-    const event: LiveAPIEvent = {
-      type,
-      timestamp: new Date(),
-      data,
-    };
-    const newEvents = [...this.state.events, event];
+  private log(message: string) {
+
+    const newEvents = [...this.state.logs, message];
 
 
     if (newEvents.length > 200) {
-      this.updateState({ events: newEvents.slice(-150) });
+      this.updateState({ logs: newEvents.slice(-150) });
     } else {
-      this.updateState({ events: newEvents });
+      this.updateState({ logs: newEvents });
     }
   }
 
@@ -193,7 +171,7 @@ export class LiveAPIClient {
       });
     } catch (e) {
       console.error("Error connecting to GenAI Live:", e);
-      this.addEvent("error", { message: "Failed to connect", error: e });
+      this.log("error: " + JSON.stringify({ message: "Failed to connect", error: e }));
       return false;
     }
 
@@ -212,7 +190,7 @@ export class LiveAPIClient {
     this.audioRecorder?.stop();
     this.audioStreamer?.stop();
 
-    this.addEvent("close", { reason: "User disconnected" });
+    this.log("close: " + JSON.stringify({ reason: "User disconnected" }));
     return true;
   }
 
@@ -228,26 +206,26 @@ export class LiveAPIClient {
 
   private onOpen() {
     this.setConnected(true);
-    this.addEvent("open");
+    this.log("open");
   }
 
   private onError(e: ErrorEvent) {
-    this.addEvent("error", { message: e.message, error: e });
+    this.log("error: " + JSON.stringify({ message: e.message, error: e }));
   }
 
   private onClose(e: CloseEvent) {
     this.setConnected(false);
-    this.addEvent("close", { reason: e.reason, code: e.code });
+    this.log("close: " + JSON.stringify({ reason: e.reason, code: e.code }));
   }
 
   private async onMessage(message: LiveServerMessage) {
     if (message.setupComplete) {
-      this.addEvent("setupcomplete");
+      this.log("setupcomplete");
       return;
     }
 
     if (message.toolCall) {
-      this.addEvent("toolcall", message.toolCall);
+      this.log("toolcall: " + JSON.stringify(message.toolCall));
 
       // Manually handle tool calls
       if (message.toolCall.functionCalls && this.tools.length > 0) {
@@ -257,7 +235,7 @@ export class LiveAPIClient {
     }
 
     if (message.toolCallCancellation) {
-      this.addEvent("toolcallcancellation", message.toolCallCancellation);
+      this.log("toolcallcancellation: " + JSON.stringify(message.toolCallCancellation));
       return;
     }
 
@@ -265,13 +243,13 @@ export class LiveAPIClient {
       const { serverContent } = message;
 
       if (serverContent.interrupted) {
-        this.addEvent("interrupted");
+        this.log("interrupted");
         this.audioStreamer?.stop();
         return;
       }
 
       if (serverContent.turnComplete) {
-        this.addEvent("turncomplete");
+        this.log("turncomplete");
       }
 
       if (serverContent.modelTurn) {
@@ -288,12 +266,12 @@ export class LiveAPIClient {
           if (b64) {
             const data = base64ToArrayBuffer(b64);
             this.audioStreamer?.addPCM16(new Uint8Array(data));
-            this.addEvent("audio", { byteLength: data.byteLength });
+            this.log("audio: " + JSON.stringify({ byteLength: data.byteLength }));
           }
         });
 
         if (otherParts.length) {
-          this.addEvent("content", { modelTurn: { parts: otherParts } });
+          this.log("content: " + JSON.stringify({ modelTurn: { parts: otherParts } }));
         }
       }
     }
@@ -315,7 +293,7 @@ export class LiveAPIClient {
 
     const parts: Part[] = [{ text }];
     this.session.sendClientContent({ turns: parts, turnComplete });
-    this.addEvent("client-send", { turns: parts, turnComplete });
+    this.log("client-send: " + JSON.stringify({ turns: parts, turnComplete }));
   }
 
   sendRealtimeInput(chunks: Array<{ mimeType: string; data: string }>) {
@@ -334,15 +312,13 @@ export class LiveAPIClient {
       }
     }
 
-    const mediaType =
-      hasAudio && hasVideo
-        ? "audio+video"
-        : hasAudio
-          ? "audio"
-          : hasVideo
-            ? "video"
-            : "unknown";
-    this.addEvent("client-realtimeInput", { mediaType });
+    const mediaType = (() => {
+      if (hasAudio && hasVideo) return "audio+video";
+      if (hasAudio) return "audio";
+      if (hasVideo) return "video";
+      return "unknown";
+    })();
+    this.log("client-realtimeInput: " + JSON.stringify({ mediaType }));
   }
 
   private async handleToolCalls(functionCalls: FunctionCall[]) {
@@ -366,12 +342,12 @@ export class LiveAPIClient {
 
         if (functionResponses.length > 0) {
           this.session.sendToolResponse({ functionResponses });
-          this.addEvent("client-toolResponse", { functionResponses });
+          this.log("client-toolResponse: " + JSON.stringify({ functionResponses }));
         }
       }
     } catch (error) {
       console.error("Error handling tool calls:", error);
-      this.addEvent("error", { message: "Tool call failed", error });
+      this.log("error: " + JSON.stringify({ message: "Tool call failed", error }));
     }
   }
 
