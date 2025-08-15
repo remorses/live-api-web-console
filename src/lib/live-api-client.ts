@@ -77,7 +77,7 @@ export class LiveAPIClient {
   private audioRecorder: AudioRecorder | null = null;
 
   // Internal state object
-  private _state: LiveAPIState = {
+  private state: LiveAPIState = {
     connected: false,
     muted: false,
     inVolume: 0,
@@ -113,13 +113,13 @@ export class LiveAPIClient {
 
   // Method to update state and notify listeners
   private updateState(updates: Partial<LiveAPIState>) {
-    this._state = { ...this._state, ...updates };
-    this.onStateChange?.(this._state);
+    this.state = { ...this.state, ...updates };
+    this.onStateChange?.(this.state);
   }
 
   // Get a copy of the current state
   public getState(): LiveAPIState {
-    return { ...this._state };
+    return { ...this.state };
   }
 
   private async initAudioStreamer() {
@@ -140,7 +140,7 @@ export class LiveAPIClient {
     if (!this.audioRecorder) return;
 
     this.audioRecorder.on("data", (base64: string) => {
-      if (this._state.connected && !this._state.muted) {
+      if (this.state.connected && !this.state.muted) {
         this.sendRealtimeInput([
           {
             mimeType: "audio/pcm;rate=16000",
@@ -161,7 +161,7 @@ export class LiveAPIClient {
       timestamp: new Date(),
       data,
     };
-    const newEvents = [...this._state.events, event];
+    const newEvents = [...this.state.events, event];
 
     // Keep events array reasonable size
     if (newEvents.length > 200) {
@@ -172,15 +172,15 @@ export class LiveAPIClient {
   }
 
   async connect(model?: string, config?: LiveConnectConfig): Promise<boolean> {
-    if (this._state.connected) {
+    if (this.state.connected) {
       return false;
     }
 
     await this.initAudioStreamer();
 
     this.updateState({
-      model: model || this._state.model,
-      config: config || this._state.config,
+      model: model || this.state.model,
+      config: config || this.state.config,
     });
 
     const callbacks: LiveCallbacks = {
@@ -192,8 +192,8 @@ export class LiveAPIClient {
 
     try {
       this.session = await this.client.live.connect({
-        model: this._state.model,
-        config: this._state.config,
+        model: this.state.model,
+        config: this.state.config,
         callbacks,
       });
     } catch (e) {
@@ -224,7 +224,7 @@ export class LiveAPIClient {
   private setConnected(value: boolean) {
     this.updateState({ connected: value });
 
-    if (value && !this._state.muted) {
+    if (value && !this.state.muted) {
       this.audioRecorder?.start();
     } else {
       this.audioRecorder?.stop();
@@ -313,7 +313,7 @@ export class LiveAPIClient {
   // Public methods for interaction
   setMuted(muted: boolean) {
     this.updateState({ muted });
-    if (this._state.connected) {
+    if (this.state.connected) {
       if (muted) {
         this.audioRecorder?.stop();
       } else {
@@ -402,7 +402,7 @@ export class LiveAPIClient {
   }
 
   getConfig() {
-    return { ...this._state.config };
+    return { ...this.state.config };
   }
 
   // Clean up
