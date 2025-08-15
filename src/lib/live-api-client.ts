@@ -1,5 +1,3 @@
-
-
 import {
   Content,
   GoogleGenAI,
@@ -15,13 +13,11 @@ import {
   MediaResolution,
 } from "@google/genai";
 
-import { difference } from "lodash";
 import { LiveClientOptions } from "../types";
 import { AudioStreamer } from "./audio-streamer";
 import { AudioRecorder } from "./audio-recorder";
 import { audioContext, base64ToArrayBuffer } from "./utils";
 import VolMeterWorket from "./worklets/vol-meter";
-
 
 export interface LiveAPIState {
   connected: boolean;
@@ -119,9 +115,7 @@ export class LiveAPIClient {
   }
 
   private log(message: string) {
-
     const newEvents = [...this.state.logs, message];
-
 
     if (newEvents.length > 200) {
       this.updateState({ logs: newEvents.slice(-150) });
@@ -157,7 +151,9 @@ export class LiveAPIClient {
       });
     } catch (e) {
       console.error("Error connecting to GenAI Live:", e);
-      this.log("error: " + JSON.stringify({ message: "Failed to connect", error: e }));
+      this.log(
+        "error: " + JSON.stringify({ message: "Failed to connect", error: e }),
+      );
       return false;
     }
 
@@ -221,7 +217,9 @@ export class LiveAPIClient {
     }
 
     if (message.toolCallCancellation) {
-      this.log("toolcallcancellation: " + JSON.stringify(message.toolCallCancellation));
+      this.log(
+        "toolcallcancellation: " + JSON.stringify(message.toolCallCancellation),
+      );
       return;
     }
 
@@ -241,23 +239,26 @@ export class LiveAPIClient {
       if (serverContent.modelTurn) {
         let parts: Part[] = serverContent.modelTurn?.parts || [];
 
-        const audioParts = parts.filter(
+        const [audioParts, otherParts] = partition(
+          parts,
           (p) => p.inlineData && p.inlineData.mimeType?.startsWith("audio/pcm"),
         );
         const base64s = audioParts.map((p) => p.inlineData?.data);
-
-        const otherParts = difference(parts, audioParts);
 
         base64s.forEach((b64) => {
           if (b64) {
             const data = base64ToArrayBuffer(b64);
             this.audioStreamer?.addPCM16(new Uint8Array(data));
-            this.log("audio: " + JSON.stringify({ byteLength: data.byteLength }));
+            this.log(
+              "audio: " + JSON.stringify({ byteLength: data.byteLength }),
+            );
           }
         });
 
         if (otherParts.length) {
-          this.log("content: " + JSON.stringify({ modelTurn: { parts: otherParts } }));
+          this.log(
+            "content: " + JSON.stringify({ modelTurn: { parts: otherParts } }),
+          );
         }
       }
     }
@@ -311,7 +312,6 @@ export class LiveAPIClient {
     if (!this.session || !this.tools.length) return;
 
     try {
-
       for (const tool of this.tools) {
         const parts = await tool.callTool(functionCalls);
 
@@ -328,12 +328,16 @@ export class LiveAPIClient {
 
         if (functionResponses.length > 0) {
           this.session.sendToolResponse({ functionResponses });
-          this.log("client-toolResponse: " + JSON.stringify({ functionResponses }));
+          this.log(
+            "client-toolResponse: " + JSON.stringify({ functionResponses }),
+          );
         }
       }
     } catch (error) {
       console.error("Error handling tool calls:", error);
-      this.log("error: " + JSON.stringify({ message: "Tool call failed", error }));
+      this.log(
+        "error: " + JSON.stringify({ message: "Tool call failed", error }),
+      );
     }
   }
 
@@ -358,4 +362,20 @@ export class LiveAPIClient {
     this.audioStreamer?.stop();
     this.tools = [];
   }
+}
+
+function partition<T>(
+  arr: T[],
+  predicate: (item: T, index: number, array: T[]) => boolean | undefined,
+): [T[], T[]] {
+  const truthy: T[] = [];
+  const falsy: T[] = [];
+  arr.forEach((item, index) => {
+    if (predicate(item, index, arr)) {
+      truthy.push(item);
+    } else {
+      falsy.push(item);
+    }
+  });
+  return [truthy, falsy];
 }
