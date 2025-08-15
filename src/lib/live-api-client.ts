@@ -93,28 +93,7 @@ export class LiveAPIClient {
     },
   };
 
-  // Public getters for state properties
-  get connected() {
-    return this._state.connected;
-  }
-  get muted() {
-    return this._state.muted;
-  }
-  get inVolume() {
-    return this._state.inVolume;
-  }
-  get outVolume() {
-    return this._state.outVolume;
-  }
-  get events() {
-    return this._state.events;
-  }
-  get model() {
-    return this._state.model;
-  }
-  get config() {
-    return this._state.config;
-  }
+
 
   // Callback for state changes
   private onStateChange?: (state: LiveAPIState) => void;
@@ -193,7 +172,7 @@ export class LiveAPIClient {
   }
 
   async connect(model?: string, config?: LiveConnectConfig): Promise<boolean> {
-    if (this.connected) {
+    if (this._state.connected) {
       return false;
     }
 
@@ -274,7 +253,7 @@ export class LiveAPIClient {
 
     if (message.toolCall) {
       this.addEvent("toolcall", message.toolCall);
-      
+
       // Manually handle tool calls
       if (message.toolCall.functionCalls && this.tools.length > 0) {
         this.handleToolCalls(message.toolCall.functionCalls);
@@ -382,12 +361,12 @@ export class LiveAPIClient {
   // Handle tool calls manually
   private async handleToolCalls(functionCalls: FunctionCall[]) {
     if (!this.session || !this.tools.length) return;
-    
+
     try {
       // Execute all callable tools and collect responses
       for (const tool of this.tools) {
         const parts = await tool.callTool(functionCalls);
-        
+
         // Convert Parts to function responses and send back
         const functionResponses = parts
           .filter(part => part.functionResponse)
@@ -396,7 +375,7 @@ export class LiveAPIClient {
             id: part.functionResponse!.id,
             name: part.functionResponse!.name,
           }));
-        
+
         if (functionResponses.length > 0) {
           this.session.sendToolResponse({ functionResponses });
           this.addEvent("client-toolResponse", { functionResponses });
