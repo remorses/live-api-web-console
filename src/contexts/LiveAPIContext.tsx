@@ -15,8 +15,8 @@
  */
 
 import { createContext, FC, ReactNode, useContext, useEffect, useMemo, useState } from "react";
-import { LiveAPIClient, LiveAPIState } from "../lib/live-api-client";
-import { LiveClientOptions } from "../types";
+import { LiveAPIClient, LiveAPIState } from "../../aispeech/lib/live-api-client";
+import { LiveClientOptions } from "../../aispeech/types";
 import { WeatherTool } from "../lib/weather-tool";
 
 const LiveAPIContext = createContext<LiveAPIClient | undefined>(undefined);

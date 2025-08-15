@@ -20,7 +20,7 @@ import cn from "classnames";
 import { memo, ReactNode } from "react";
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { vs2015 as dark } from "react-syntax-highlighter/dist/esm/styles/hljs";
-import { LiveAPIEvent } from "../../lib/live-api-client";
+import { LiveAPIEvent } from "../../../aispeech/lib/live-api-client";
 import {
   Content,
   LiveClientToolResponse,

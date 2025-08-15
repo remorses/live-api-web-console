@@ -17,7 +17,7 @@
 /**
  * this module is just mock data, intended to make it easier to develop and style the logger
  */
-import type { StreamingLog } from "../../types";
+import type { StreamingLog } from "../../../aispeech/types";
 
 const soundLogs = (n: number): StreamingLog[] =>
   new Array(n).fill(0).map(

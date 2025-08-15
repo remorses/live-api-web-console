@@ -19,12 +19,18 @@ import { AudioRecorder } from "./audio-recorder";
 import { audioContext, base64ToArrayBuffer } from "./utils";
 import VolMeterWorket from "./worklets/vol-meter";
 
+export interface LiveAPIEvent {
+  type: string;
+  timestamp: Date;
+  data: any;
+}
+
 export interface LiveAPIState {
   connected: boolean;
   muted: boolean;
   inVolume: number;
   outVolume: number;
-  logs: string[];
+  logs: LiveAPIEvent[];
   model: string;
   config: LiveConnectConfig;
 }
@@ -115,7 +121,34 @@ export class LiveAPIClient {
   }
 
   private log(message: string) {
-    const newEvents = [...this.state.logs, message];
+    // Parse the message to extract type and data
+    const colonIndex = message.indexOf(":");
+    let type = message;
+    let data: any = "";
+    
+    if (colonIndex !== -1) {
+      type = message.substring(0, colonIndex).trim();
+      const dataStr = message.substring(colonIndex + 1).trim();
+      
+      // Try to parse JSON data if it exists
+      if (dataStr.startsWith("{") || dataStr.startsWith("[")) {
+        try {
+          data = JSON.parse(dataStr);
+        } catch {
+          data = dataStr;
+        }
+      } else {
+        data = dataStr;
+      }
+    }
+    
+    const event: LiveAPIEvent = {
+      type,
+      timestamp: new Date(),
+      data
+    };
+    
+    const newEvents = [...this.state.logs, event];
 
     if (newEvents.length > 200) {
       this.updateState({ logs: newEvents.slice(-150) });
