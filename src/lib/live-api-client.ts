@@ -76,7 +76,6 @@ export class LiveAPIClient {
   private audioStreamer: AudioStreamer | null = null;
   private audioRecorder: AudioRecorder | null = null;
 
-  // Internal state object
   private state: LiveAPIState = {
     connected: false,
     muted: false,
@@ -93,12 +92,8 @@ export class LiveAPIClient {
     },
   };
 
-
-
-  // Callback for state changes
   private onStateChange?: (state: LiveAPIState) => void;
 
-  // Callable tools
   private tools: CallableTool[] = [];
 
   constructor(options: LiveAPIClientOptions) {
@@ -163,7 +158,7 @@ export class LiveAPIClient {
     };
     const newEvents = [...this.state.events, event];
 
-    // Keep events array reasonable size
+
     if (newEvents.length > 200) {
       this.updateState({ events: newEvents.slice(-150) });
     } else {
@@ -269,31 +264,26 @@ export class LiveAPIClient {
     if (message.serverContent) {
       const { serverContent } = message;
 
-      if ("interrupted" in serverContent) {
+      if (serverContent.interrupted) {
         this.addEvent("interrupted");
         this.audioStreamer?.stop();
         return;
       }
 
-      if ("turnComplete" in serverContent) {
+      if (serverContent.turnComplete) {
         this.addEvent("turncomplete");
-        // Signal to audio streamer that the turn is complete so it can flush remaining audio
-        // this.audioStreamer?.complete();
       }
 
-      if ("modelTurn" in serverContent) {
+      if (serverContent.modelTurn) {
         let parts: Part[] = serverContent.modelTurn?.parts || [];
 
-        // Handle audio parts
         const audioParts = parts.filter(
           (p) => p.inlineData && p.inlineData.mimeType?.startsWith("audio/pcm"),
         );
         const base64s = audioParts.map((p) => p.inlineData?.data);
 
-        // Strip audio parts from content
         const otherParts = difference(parts, audioParts);
 
-        // Play audio
         base64s.forEach((b64) => {
           if (b64) {
             const data = base64ToArrayBuffer(b64);
@@ -302,7 +292,6 @@ export class LiveAPIClient {
           }
         });
 
-        // Add content event if there are non-audio parts
         if (otherParts.length) {
           this.addEvent("content", { modelTurn: { parts: otherParts } });
         }
@@ -310,7 +299,6 @@ export class LiveAPIClient {
     }
   }
 
-  // Public methods for interaction
   setMuted(muted: boolean) {
     this.updateState({ muted });
     if (this.state.connected) {
@@ -357,21 +345,21 @@ export class LiveAPIClient {
     this.addEvent("client-realtimeInput", { mediaType });
   }
 
-
-  // Handle tool calls manually
   private async handleToolCalls(functionCalls: FunctionCall[]) {
     if (!this.session || !this.tools.length) return;
 
     try {
-      // Execute all callable tools and collect responses
+
       for (const tool of this.tools) {
         const parts = await tool.callTool(functionCalls);
 
-        // Convert Parts to function responses and send back
         const functionResponses = parts
-          .filter(part => part.functionResponse)
-          .map(part => ({
-            response: part.functionResponse!.response as Record<string, unknown>,
+          .filter((part) => part.functionResponse)
+          .map((part) => ({
+            response: part.functionResponse!.response as Record<
+              string,
+              unknown
+            >,
             id: part.functionResponse!.id,
             name: part.functionResponse!.name,
           }));
@@ -387,11 +375,8 @@ export class LiveAPIClient {
     }
   }
 
-  // Update configuration
   setConfig(config: LiveConnectConfig) {
-    // Extract CallableTools from the config if provided
     if (config.tools) {
-      // Only keep CallableTools - we don't support other tool types
       this.tools = config.tools as CallableTool[];
     }
     this.updateState({ config });
@@ -405,7 +390,6 @@ export class LiveAPIClient {
     return { ...this.state.config };
   }
 
-  // Clean up
   destroy() {
     this.disconnect();
     this.audioRecorder?.stop();
