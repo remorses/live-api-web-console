@@ -34,9 +34,6 @@ function AltairComponent() {
   }, [altairTool]);
 
   useEffect(() => {
-    // Configure the model - using Google's recommended settings
-    client.setModel("models/gemini-2.5-flash-preview-native-audio-dialog");
-    
     // Set tools along with other config
     client.setConfig({
       responseModalities: [Modality.AUDIO],

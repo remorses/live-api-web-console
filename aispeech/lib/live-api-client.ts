@@ -19,23 +19,17 @@ import { AudioRecorder } from "./audio-recorder";
 import { audioContext, base64ToArrayBuffer } from "./utils";
 import VolMeterWorket from "./worklets/vol-meter";
 
-export interface LiveAPIEvent {
-  type: string;
-  timestamp: Date;
-  data: any;
-}
-
 export interface LiveAPIState {
   connected: boolean;
   muted: boolean;
   inVolume: number;
   outVolume: number;
-  logs: LiveAPIEvent[];
-  model: string;
+  logs: string[];
   config: LiveConnectConfig;
 }
 
 export interface LiveAPIClientOptions extends LiveClientOptions {
+  model: string;
   onStateChange?: (state: LiveAPIState) => void;
   tools?: CallableTool[];
 }
@@ -45,6 +39,7 @@ export class LiveAPIClient {
   private session: Session | null = null;
   private audioStreamer: AudioStreamer | null = null;
   private audioRecorder: AudioRecorder | null = null;
+  private model: string;
 
   private state: LiveAPIState = {
     connected: false,
@@ -52,7 +47,6 @@ export class LiveAPIClient {
     inVolume: 0,
     outVolume: 0,
     logs: [],
-    model: "models/gemini-2.5-flash-preview-native-audio-dialog",
     config: {
       mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM,
       contextWindowCompression: {
@@ -67,7 +61,8 @@ export class LiveAPIClient {
   private tools: CallableTool[] = [];
 
   constructor(options: LiveAPIClientOptions) {
-    const { onStateChange, tools, ...clientOptions } = options;
+    const { model, onStateChange, tools, ...clientOptions } = options;
+    this.model = model;
     this.client = new GoogleGenAI(clientOptions);
     this.onStateChange = onStateChange;
     this.tools = tools || [];
@@ -121,34 +116,7 @@ export class LiveAPIClient {
   }
 
   private log(message: string) {
-    // Parse the message to extract type and data
-    const colonIndex = message.indexOf(":");
-    let type = message;
-    let data: any = "";
-    
-    if (colonIndex !== -1) {
-      type = message.substring(0, colonIndex).trim();
-      const dataStr = message.substring(colonIndex + 1).trim();
-      
-      // Try to parse JSON data if it exists
-      if (dataStr.startsWith("{") || dataStr.startsWith("[")) {
-        try {
-          data = JSON.parse(dataStr);
-        } catch {
-          data = dataStr;
-        }
-      } else {
-        data = dataStr;
-      }
-    }
-    
-    const event: LiveAPIEvent = {
-      type,
-      timestamp: new Date(),
-      data
-    };
-    
-    const newEvents = [...this.state.logs, event];
+    const newEvents = [...this.state.logs, message];
 
     if (newEvents.length > 200) {
       this.updateState({ logs: newEvents.slice(-150) });
@@ -157,17 +125,12 @@ export class LiveAPIClient {
     }
   }
 
-  async connect(model?: string, config?: LiveConnectConfig): Promise<boolean> {
+  async connect(): Promise<boolean> {
     if (this.state.connected) {
       return false;
     }
 
     await this.initAudioStreamer();
-
-    this.updateState({
-      model: model || this.state.model,
-      config: config || this.state.config,
-    });
 
     const callbacks: LiveCallbacks = {
       onopen: this.onOpen.bind(this),
@@ -178,7 +141,7 @@ export class LiveAPIClient {
 
     try {
       this.session = await this.client.live.connect({
-        model: this.state.model,
+        model: this.model,
         config: this.state.config,
         callbacks,
       });
@@ -381,9 +344,6 @@ export class LiveAPIClient {
     this.updateState({ config });
   }
 
-  setModel(model: string) {
-    this.updateState({ model });
-  }
 
   getConfig() {
     return { ...this.state.config };

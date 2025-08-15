@@ -38,6 +38,7 @@ export const LiveAPIProvider: FC<LiveAPIProviderProps> = ({
   const client = useMemo(() => {
     return new LiveAPIClient({
       ...options,
+      model: "models/gemini-2.5-flash-preview-native-audio-dialog",
       tools: [weatherTool],
       onStateChange: (state) => setClientState(state),
     });
