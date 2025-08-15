@@ -1,21 +1,18 @@
 import {
-  Content,
-  GoogleGenAI,
-  LiveCallbacks,
-  LiveConnectConfig,
-  LiveServerContent,
-  LiveServerMessage,
-  LiveServerToolCall,
-  Part,
-  Session,
-  CallableTool,
-  FunctionCall,
-  MediaResolution,
+    CallableTool,
+    FunctionCall,
+    GoogleGenAI,
+    LiveCallbacks,
+    LiveConnectConfig,
+    LiveServerMessage,
+    MediaResolution,
+    Part,
+    Session
 } from "@google/genai";
 
 import { LiveClientOptions } from "../types";
-import { AudioStreamer } from "./audio-streamer";
 import { AudioRecorder } from "./audio-recorder";
+import { AudioStreamer } from "./audio-streamer";
 import { audioContext, base64ToArrayBuffer } from "./utils";
 import VolMeterWorket from "./worklets/vol-meter";
 

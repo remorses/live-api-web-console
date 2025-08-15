@@ -20,7 +20,6 @@ import cn from "classnames";
 import { memo, ReactNode } from "react";
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { vs2015 as dark } from "react-syntax-highlighter/dist/esm/styles/hljs";
-import { LiveAPIEvent } from "../../../aispeech/lib/live-api-client";
 import {
   Content,
   LiveClientToolResponse,
@@ -35,6 +34,12 @@ const formatTime = (d: Date) => d.toLocaleTimeString().slice(0, -3);
 interface ClientContentLog {
   turns: Part[];
   turnComplete: boolean;
+}
+
+interface LiveAPIEvent {
+  type: string;
+  timestamp: Date;
+  data: any;
 }
 
 const LogEntry = memo(
@@ -202,7 +207,7 @@ export type LoggerFilterType = "conversations" | "tools" | "none";
 
 export type LoggerProps = {
   filter: LoggerFilterType;
-  events: LiveAPIEvent[];
+  events: string[];
 };
 
 const filters: Record<LoggerFilterType, (event: LiveAPIEvent) => boolean> = {
@@ -249,13 +254,42 @@ const component = (event: LiveAPIEvent) => {
   }
 };
 
+function parseLogString(logStr: string): LiveAPIEvent {
+  const colonIndex = logStr.indexOf(":");
+  let type = logStr;
+  let data: any = "";
+  
+  if (colonIndex !== -1) {
+    type = logStr.substring(0, colonIndex).trim();
+    const dataStr = logStr.substring(colonIndex + 1).trim();
+    
+    // Try to parse JSON data if it exists
+    if (dataStr.startsWith("{") || dataStr.startsWith("[")) {
+      try {
+        data = JSON.parse(dataStr);
+      } catch {
+        data = dataStr;
+      }
+    } else {
+      data = dataStr;
+    }
+  }
+  
+  return {
+    type,
+    timestamp: new Date(),
+    data
+  };
+}
+
 export default function Logger({ filter = "none", events }: LoggerProps) {
   const filterFn = filters[filter];
+  const parsedEvents = events.map(parseLogString);
 
   return (
     <div className="logger">
       <ul className="logger-list">
-        {events.filter(filterFn).map((event, key) => {
+        {parsedEvents.filter(filterFn).map((event, key) => {
           return (
             <LogEntry MessageComponent={component(event)} event={event} key={key} />
           );
